@@ -8,6 +8,6 @@ Hill climb<br/>
 Hill climb ramp straightner<br/>
 <br/>
 ## Contibuters
-Joshua Biggins
-Max Fielding
+Joshua Biggins<br/>
+Max Fielding<br/>
 Gunjeet Singh
