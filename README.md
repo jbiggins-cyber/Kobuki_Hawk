@@ -1,12 +1,12 @@
 # Kobuki_Hawk
 Embedded System Design Kobuki Robot Final Project 
 
-Roomba style robot project.
-Includes drift feedback-based control
-Obstacle avoidance
-Hill climb
-Hill climb ramp straightner
-
+Roomba style robot project. <br/>
+Includes drift feedback-based control <br/>
+Obstacle avoidance<br/>
+Hill climb<br/>
+Hill climb ramp straightner<br/>
+<br/>
 ## Contibuters
 Joshua Biggins
 Max Fielding
