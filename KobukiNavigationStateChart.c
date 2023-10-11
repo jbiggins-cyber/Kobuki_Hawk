@@ -12,8 +12,9 @@
 #define TURN_ANGLE 90
 #define HILL_THRESHOLD 0.06
 #define REORIENT_THRESHOLD 0.01
-#define WHEEL_SPEED 200
+#define WHEEL_SPEED 400
 #define REORIENT_WHEEL_SPEED 25
+#define NORMAL_ANGLE 45
 
 
 // Program States
@@ -25,10 +26,11 @@ typedef enum{
 	DRIVE,								// Drive straight
 	TURN_LEFT,							/// Turn
 	TURN_RIGHT,
-	DRIVE_AVOID,
+	//DRIVE_AVOID,
+	CENTER_RIGHT,
+	CENTER_LEFT,
 	REORIENT_LEFT,
 	REORIENT_RIGHT
-
 } robotState_t;
 
 #define DEG_PER_RAD			(180.0 / M_PI)		// degrees per radian
@@ -48,10 +50,10 @@ void KobukiNavigationStatechart(
 	// local state
 	static robotState_t 		state = INITIAL;				// current program state
 	static robotState_t			unpausedState = DRIVE;			// state history for pause region
-	static robotState_t			postCollisionState = TURN_LEFT;	// state post-collision
-	static int					distanceAtManeuverStart = 0;	// distance robot had travelled when a maneuver begins, in mm
+	//static robotState_t			postCollisionState = TURN_LEFT;	// state post-collision
+	//static int					distanceAtManeuverStart = 0;	// distance robot had travelled when a maneuver begins, in mm
 	static int					angleAtManeuverStart = 0;		// angle through which the robot had turned when a maneuver begins, in deg
-	static bool					collisionFlag = false;
+	static bool					inArc = false;
 	static int					driveDist = MAX_DIST;
 
 	// outputs
@@ -124,6 +126,7 @@ void KobukiNavigationStatechart(
 	}
 
 	else if (state == DRIVE && fabs(accel) >= HILL_THRESHOLD) {
+
 		if (accel > 0) {
 			state = REORIENT_RIGHT;
 		}
@@ -134,56 +137,82 @@ void KobukiNavigationStatechart(
 	}
 
 	else if ((state == REORIENT_LEFT || state == REORIENT_RIGHT)
+
 		&& fabs(accel) < REORIENT_THRESHOLD) {
 		state = DRIVE;
 	}
 
 	else if (state == DRIVE &&
-		(abs(netDistance - distanceAtManeuverStart) >= driveDist
-			|| sensors.bumps_wheelDrops.bumpLeft
+		//(abs(netDistance - distanceAtManeuverStart) >= driveDist 
+		(
+		    sensors.bumps_wheelDrops.bumpLeft
 			|| sensors.bumps_wheelDrops.bumpCenter
 			|| sensors.bumps_wheelDrops.bumpRight
 			)) {
 		angleAtManeuverStart = netAngle;
-		distanceAtManeuverStart = netDistance;
+		//distanceAtManeuverStart = netDistance;
+		inArc = true;
 		if (sensors.bumps_wheelDrops.bumpRight)
 		{
 			state = TURN_LEFT;
-			collisionFlag = true;
-			driveDist = MAX_DIST_AVOID;
+			
 		}
 		else if (sensors.bumps_wheelDrops.bumpLeft)
 		{
+
 			state = TURN_RIGHT;
-			collisionFlag = true;
-			driveDist = MAX_DIST_AVOID;
 		}
 		else if (sensors.bumps_wheelDrops.bumpCenter) {
-			state = TURN_LEFT;
-			collisionFlag = true;
-			driveDist = MAX_DIST_AVOID;
+
+			if (netAngle > 0) {
+
+				state = CENTER_LEFT;
+			}
+			else {
+				
+				state = CENTER_RIGHT;
+			}
 		}
-		else if (collisionFlag) {
-			state = postCollisionState;
-			collisionFlag = false;
-			driveDist = MAX_DIST;
+	} 
+
+	if (state == CENTER_LEFT && abs(netAngle - angleAtManeuverStart) >= NORMAL_ANGLE) {
+		
+		angleAtManeuverStart = netAngle;
+		state = TURN_RIGHT;
+		inArc = true;
+	} else if (state == CENTER_RIGHT && abs(netAngle - angleAtManeuverStart) >= NORMAL_ANGLE) {
+
+		angleAtManeuverStart = netAngle;
+		state = TURN_LEFT;
+		inArc = true;
+	}
+
+	if (state == TURN_LEFT && abs(netAngle - angleAtManeuverStart) >= TURN_ANGLE){
+		
+		angleAtManeuverStart = netAngle;
+
+		if (inArc) {
+
+			state = TURN_RIGHT;
+			inArc = false;
 		}
 		else {
-			state = TURN_LEFT;
+			state = DRIVE;
 		}
+	}
 
-	}
-	else if (state == TURN_LEFT && abs(netAngle - angleAtManeuverStart) >= TURN_ANGLE){
+	if (state == TURN_RIGHT && abs(netAngle - angleAtManeuverStart) >= TURN_ANGLE) {
+
 		angleAtManeuverStart = netAngle;
-		distanceAtManeuverStart = netDistance;
-		state = DRIVE;
-		postCollisionState = TURN_RIGHT;
-	}
-	else if (state == TURN_RIGHT && abs(netAngle - angleAtManeuverStart) >= TURN_ANGLE) {
-		angleAtManeuverStart = netAngle;
-		distanceAtManeuverStart = netDistance;
-		state = DRIVE;
-		postCollisionState = TURN_LEFT;
+		//distanceAtManeuverStart = netDistance;
+		if (inArc) {
+
+			state = TURN_LEFT;
+			inArc = false;
+		}
+		else {
+			state = DRIVE;
+		}
 	}
 
 	// else, no transitions are taken
@@ -201,19 +230,28 @@ void KobukiNavigationStatechart(
 		break;
 
 	case DRIVE:
-	case DRIVE_AVOID:
-		// full speed ahead!
-		leftWheelSpeed = rightWheelSpeed = WHEEL_SPEED;
+
+		leftWheelSpeed = WHEEL_SPEED;
+		rightWheelSpeed = leftWheelSpeed;
+		break;
+	case CENTER_RIGHT:
+
+		leftWheelSpeed = WHEEL_SPEED;
+		rightWheelSpeed = - leftWheelSpeed;
+		break;
+	case CENTER_LEFT:
+		rightWheelSpeed = WHEEL_SPEED;
+		leftWheelSpeed = - rightWheelSpeed;
 		break;
 
 	case TURN_RIGHT:
-		leftWheelSpeed = WHEEL_SPEED;
-		rightWheelSpeed = -leftWheelSpeed;
+		leftWheelSpeed = (short) 1.5 * WHEEL_SPEED;
+		rightWheelSpeed = (short) 0.5 * leftWheelSpeed;
 		break;
 
 	case TURN_LEFT:
-		rightWheelSpeed = WHEEL_SPEED;
-		leftWheelSpeed = -rightWheelSpeed;
+		rightWheelSpeed = (short) 1.5 * WHEEL_SPEED;
+		leftWheelSpeed = (short) 0.8 * rightWheelSpeed;
 		break;
 
 	case REORIENT_RIGHT:
@@ -231,7 +269,6 @@ void KobukiNavigationStatechart(
 		leftWheelSpeed = rightWheelSpeed = 0;
 		break;
 	}
-
 
 	*pLeftWheelSpeed = leftWheelSpeed;
 	*pRightWheelSpeed = rightWheelSpeed;
