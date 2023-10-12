@@ -58,6 +58,8 @@ void KobukiNavigationStatechart(
 	bool pauseButton =	sensors.buttons.B0;
 	bool bumpLeft =		sensors.bumps_wheelDrops.bumpLeft;
 	bool bumpRight =	sensors.bumps_wheelDrops.bumpRight;
+    bool bumpCenter =	sensors.bumps_wheelDrops.bumpCenter;
+
 	bool cliff =		sensors.cliffLeft || sensors.cliffCenter || sensors.cliffRight;
 	double perp_accel, para_accel;							// acceleration of gyroscope perpendicular to direction of travel
 	if (isSimulator) {
@@ -121,6 +123,7 @@ void KobukiNavigationStatechart(
 		|| state == REVERSE
 		|| bumpLeft
 		|| bumpRight
+        || bumpCenter
 		|| cliff) {
 		switch (state) {
 		case DRIVE:
@@ -154,7 +157,17 @@ void KobukiNavigationStatechart(
 					state = TURN_RIGHT;
 					driveDist = MAX_DIST_AVOID;
 				}
+                
+                else if (bumpCenter) {
+                    
+                    if (netAngle > 0) {
 
+                        state = TURN_RIGHT;
+                    }
+                    else  {
+                        state = TURN_LEFT;
+                    }
+                }
 				// Turn left
 				else /* (bumpRight) */ {
 					state = TURN_LEFT;
