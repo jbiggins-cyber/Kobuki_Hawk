@@ -8,15 +8,20 @@
 #include <stdlib.h>
 
 #define MAX_DIST 				9999
-#define MAX_DIST_AVOID 			250
+#define MAX_DIST_AVOID 			200
 #define TURN_ANGLE 				90
-#define HILL_UPPER_THRESHOLD 	0.06
-#define HILL_LOWER_THRESHOLD 	0.01
-#define DRIVE_SPEED 			100
-#define TURN_SPEED				75
+#define HILL_UPPER_THRESHOLD 	0.05 // 0.06
+#define HILL_LOWER_THRESHOLD 	0.02 // 0.01
+#define DRIVE_SPEED 			225 // 100
+#define TURN_SPEED				100 // 75
 #define ORIGINAL_ANGLE_THRESH	2
-#define REVERSE_DIST			100
-#define OFFSET_WHEEL_SPEED		40
+#define REVERSE_DIST			50
+#define REVERSE_CLIFF_DIST		100
+#define OFFSET_WHEEL_SPEED		30
+
+# define int16_t short
+# define int32_t int
+# define int64_t long int
 
 
 // Program States
@@ -29,7 +34,9 @@ typedef enum {
 	TURN_RIGHT,							// Turn right 90 degrees
 	TURN_LEFT_ORIGIN,					// Turn left back to original direction of travel
 	TURN_RIGHT_ORIGIN,					// Turn right back to original direction of travel
-	REVERSE								// Reverse after consecutive bumps
+	REVERSE,							// Reverse after consecutive bumps
+	REVERSE_LEFT,
+	REVERSE_RIGHT
 
 } robotState_t;
 
@@ -58,9 +65,10 @@ void KobukiNavigationStatechart(
 	bool pauseButton =	sensors.buttons.B0;
 	bool bumpLeft =		sensors.bumps_wheelDrops.bumpLeft;
 	bool bumpRight =	sensors.bumps_wheelDrops.bumpRight;
-    bool bumpCenter =	sensors.bumps_wheelDrops.bumpCenter;
-
-	bool cliff =		sensors.cliffLeft || sensors.cliffCenter || sensors.cliffRight;
+	bool bumpCenter = 	sensors.bumps_wheelDrops.bumpCenter;
+	bool cliffLeft =	sensors.cliffLeft;
+	bool cliffCenter =	sensors.cliffCenter;
+	bool cliffRight =	sensors.cliffRight;
 	double perp_accel, para_accel;							// acceleration of gyroscope perpendicular to direction of travel
 	if (isSimulator) {
 		perp_accel = accelAxes.x;
@@ -121,28 +129,51 @@ void KobukiNavigationStatechart(
 		|| state == TURN_LEFT_ORIGIN
 		|| state == TURN_RIGHT_ORIGIN
 		|| state == REVERSE
+		|| state == REVERSE_LEFT
+		|| state == REVERSE_RIGHT
 		|| bumpLeft
 		|| bumpRight
-        || bumpCenter
-		|| cliff) {
+		|| bumpCenter
+		|| cliffLeft
+		|| cliffCenter
+		|| cliffRight) {
 		switch (state) {
 		case DRIVE:
 			// Remain in this state until a bump, a cliff,
-			// the maximum distance has been traversed 
-			// and we are not travelling in the right direction, 
+			// the maximum distance has been traversed
+			// and we are not travelling in the right direction,
 			// a hill is detected,
 			// or we need to align with a slope
 
 			// CLIFF!
-			if (cliff) {
+			if (cliffLeft || cliffCenter || cliffRight) {
 				angleAtManeuverStart = netAngle;
 				distanceAtManeuverStart = netDistance;
-				state = REVERSE;
-				driveDist = REVERSE_DIST;
+
+				if (cliffLeft) {
+					state = REVERSE_RIGHT;
+					driveDist = REVERSE_CLIFF_DIST;
+				} else if (cliffRight) {
+					state = REVERSE_LEFT;
+					driveDist = REVERSE_CLIFF_DIST;
+				} else {
+					if (netAngle < 0) {
+						state = REVERSE_RIGHT;
+					}
+
+					else {
+						state = REVERSE_LEFT;
+					}
+					driveDist = REVERSE_DIST;
+				}
 			}
 
 			// BUMPED!
-			else if (bumpLeft || bumpRight) {
+			else if (bumpLeft
+					|| cliffLeft
+					|| bumpRight
+					|| cliffRight
+					|| bumpCenter) {
 				angleAtManeuverStart = netAngle;
 				distanceAtManeuverStart = netDistance;
 
@@ -157,20 +188,21 @@ void KobukiNavigationStatechart(
 					state = TURN_RIGHT;
 					driveDist = MAX_DIST_AVOID;
 				}
-                
-                else if (bumpCenter) {
-                    
-                    if (netAngle > 0) {
 
-                        state = TURN_RIGHT;
-                    }
-                    else  {
-                        state = TURN_LEFT;
-                    }
-                }
 				// Turn left
-				else /* (bumpRight) */ {
+				else if (bumpRight) {
 					state = TURN_LEFT;
+					driveDist = MAX_DIST_AVOID;
+				}
+
+				// Bump center turn left
+				else if (netAngle < 0) {
+					state = TURN_LEFT;
+					driveDist = MAX_DIST_AVOID;
+				}
+
+				else {
+					state = TURN_RIGHT;
 					driveDist = MAX_DIST_AVOID;
 				}
 			}
@@ -196,7 +228,7 @@ void KobukiNavigationStatechart(
 
 			// SLOPE!
 			else if (fabs(perp_accel) >= HILL_UPPER_THRESHOLD) {
-				
+
 				// Uphill right
 				if (perp_accel > 0 && para_accel > 0) {
 					reorientWheelOffset = OFFSET_WHEEL_SPEED;
@@ -219,7 +251,7 @@ void KobukiNavigationStatechart(
 			}
 
 			// NO SLOPE!
-			else if (fabs(perp_accel) < HILL_LOWER_THRESHOLD) {
+			if (fabs(perp_accel) < HILL_LOWER_THRESHOLD) {
 				reorientWheelOffset = 0;
 			}
 			break;
@@ -267,6 +299,28 @@ void KobukiNavigationStatechart(
 			}
 			break;
 
+		case REVERSE_LEFT:
+
+			if (abs(netDistance - distanceAtManeuverStart) >= driveDist) {
+				angleAtManeuverStart = netAngle;
+				distanceAtManeuverStart = netDistance;
+				state = TURN_LEFT;
+				driveDist = MAX_DIST_AVOID;
+			}
+
+			break;
+
+		case REVERSE_RIGHT:
+
+			if (abs(netDistance - distanceAtManeuverStart) >= driveDist) {
+				angleAtManeuverStart = netAngle;
+				distanceAtManeuverStart = netDistance;
+				state = TURN_RIGHT;
+				driveDist = MAX_DIST_AVOID;
+			}
+
+			break;
+
 		default: // state is unknown: reset
 			unpausedState = DRIVE;
 			state = PAUSE_WAIT_BUTTON_RELEASE;
@@ -307,6 +361,8 @@ void KobukiNavigationStatechart(
 		break;
 
 	case REVERSE:
+	case REVERSE_LEFT:
+	case REVERSE_RIGHT:
 		leftWheelSpeed = -DRIVE_SPEED;
 		rightWheelSpeed = leftWheelSpeed;
 		break;
