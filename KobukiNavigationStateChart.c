@@ -12,7 +12,7 @@
 #define TURN_ANGLE 				90
 #define HILL_UPPER_THRESHOLD 	0.06
 #define HILL_LOWER_THRESHOLD 	0.01
-#define DRIVE_SPEED 			100
+#define DRIVE_SPEED 			225
 #define TURN_SPEED				75
 #define ORIGINAL_ANGLE_THRESH	2
 #define REVERSE_DIST			100
@@ -53,8 +53,8 @@ void KobukiNavigationStatechart(
 	static int					angleAtManeuverStart = 0;			// angle through which the robot had turned when a maneuver begins, in deg
 	static int					driveDist = MAX_DIST;
 	static int					reorientWheelOffset = 0;
-
-	// inputs
+    // static int                  pauseAngle = 0;                     //  angle set before pausing
+    // inputs
 	bool pauseButton =	sensors.buttons.B0;
 	bool bumpLeft =		sensors.bumps_wheelDrops.bumpLeft;
 	bool bumpRight =	sensors.bumps_wheelDrops.bumpRight;
@@ -99,7 +99,7 @@ void KobukiNavigationStatechart(
 			break;
 		case UNPAUSE_WAIT_BUTTON_PRESS:
 			// remain in this state until user presses 'pause' button
-			if (pauseButton) {
+            if (pauseButton) {
 				state = UNPAUSE_WAIT_BUTTON_RELEASE;
 			}
 			break;
